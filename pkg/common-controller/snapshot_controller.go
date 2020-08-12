@@ -226,6 +226,16 @@ func (ctrl *csiSnapshotCommonController) isPVCwithFinalizerInUseByCurrentSnapsho
 		return false
 	}
 
+	// Check to see if the backing PV is created by a CSI driver. If not, then remove the Finalizer
+	pv, err := ctrl.getVolumeFromVolumeSnapshot(snapshot)
+	if err != nil {
+		klog.Infof("cannot get volume from snapshot [%s]: [%v]", snapshot.Name, err)
+	}
+	if pv.Spec.CSI == nil {
+		klog.Infof("cannot find CSI PersistentVolumeSource for volume %s: marking snapshot [%s] as not in use", pv.Name, snapshot.Name)
+		return false
+	}
+
 	if !utils.IsSnapshotReady(snapshot) {
 		klog.V(2).Infof("PVC %s/%s is being used by snapshot %s/%s as source", pvc.Namespace, pvc.Name, snapshot.Namespace, snapshot.Name)
 		return true
@@ -255,7 +265,7 @@ func (ctrl *csiSnapshotCommonController) processSnapshotWithDeletionTimestamp(sn
 	content, err := ctrl.getContentFromStore(contentName)
 	if err != nil {
 		// If err != nil, it means content == nil. Don't return here because
-		// we need to remove the finalizer from the snapshot later 
+		// we need to remove the finalizer from the snapshot later
 		klog.Errorf("processSnapshotWithDeletionTimestamp[%s]: Failed to get snapshot content from cache store: %v", utils.SnapshotKey(snapshot), err)
 	}
 
